@@ -414,6 +414,315 @@ graph TB
 
 ---
 
+## 📱 Offline Support Architecture
+
+### Overview
+The Baby Tracker application must function seamlessly even without network connectivity, as parents often need to log activities in areas with poor reception or to preserve device battery by keeping network off.
+
+### Offline-First Design Principles
+
+#### 1. Local-First Data Storage
+- **SQLite Local Database**: Each device maintains a complete local copy of user data
+- **Conflict-Free Replicated Data Types (CRDTs)**: For handling concurrent edits
+- **Event Sourcing**: Track all changes as events for reliable synchronization
+
+#### 2. Offline Data Architecture
+
+```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#4F46E5',
+    'primaryTextColor': '#000000',
+    'primaryBorderColor': '#4338CA',
+    'lineColor': '#6366F1',
+    'secondaryColor': '#E2E8F0',
+    'tertiaryColor': '#F1F5F9',
+    'textColor': '#000000',
+    'mainBkg': '#ffffff'
+  }
+}}%%
+graph TB
+    subgraph "Device Storage Layer"
+        SQLite["SQLite Database<br>Local data + metadata"]
+        Cache["Image Cache<br>Compressed photos"]
+        Queue["Sync Queue<br>Pending operations"]
+        State["App State<br>Last sync timestamps"]
+    end
+
+    subgraph "Sync Engine"
+        Detection["Network Detection"]
+        Conflict["Conflict Resolution"]
+        Merge["Data Merge Logic"]
+        Retry["Retry Mechanism"]
+    end
+
+    subgraph "Remote Backend"
+        Supabase["Supabase Database"]
+        Storage["Supabase Storage"]
+        Realtime["Real-time Subscriptions"]
+    end
+
+    SQLite --> Detection
+    Cache --> Detection
+    Queue --> Detection
+    
+    Detection --> Conflict
+    Conflict --> Merge
+    Merge --> Retry
+    
+    Retry --> Supabase
+    Retry --> Storage
+    Supabase --> Realtime
+    
+    Realtime --> SQLite
+    Storage --> Cache
+
+    classDef default fill:#F8FAFC,stroke:#475569,stroke-width:2px
+    classDef local fill:#E0E7FF,stroke:#4338CA,stroke-width:2px
+    classDef sync fill:#DCFCE7,stroke:#166534,stroke-width:2px
+    classDef remote fill:#F3E8FF,stroke:#6B21A8,stroke-width:2px
+    
+    class SQLite,Cache,Queue,State local
+    class Detection,Conflict,Merge,Retry sync
+    class Supabase,Storage,Realtime remote
+```
+
+### Offline Data Synchronization Flow
+
+```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#818CF8',
+    'primaryTextColor': '#312E81',
+    'primaryBorderColor': '#4338CA',
+    'lineColor': '#6366F1',
+    'secondaryColor': '#E0E7FF',
+    'tertiaryColor': '#EEF2FF',
+    'noteTextColor': '#1E1B4B',
+    'noteBorderColor': '#4338CA',
+    'noteBkgColor': '#E0E7FF',
+    'activationBorderColor': '#4338CA',
+    'activationBkgColor': '#EEF2FF',
+    'sequenceNumberColor': '#312E81'
+  }
+}}%%
+sequenceDiagram
+    participant User as User
+    participant App as Mobile App
+    participant Local as SQLite DB
+    participant Sync as Sync Engine
+    participant Remote as Supabase
+
+    rect rgb(224, 231, 255)
+        Note over User,Remote: Offline Data Entry Flow
+        
+        User->>App: Add feeding entry
+        Note over App: Status: OFFLINE
+        
+        App->>Local: Store entry locally
+        Note over Local: INSERT with status='pending'<br/>uuid: local-generated<br/>timestamp: device-time
+        
+        App->>App: Update sync queue
+        Note over App: Add operation:<br/>type: 'INSERT'<br/>table: 'feeding_logs'<br/>data: entry_data
+        
+        App-->>User: Entry saved locally
+        Note over App: Show: "Saved (sync pending)"
+        
+        Note over User,Remote: Network Reconnection Flow
+        
+        App->>Sync: Detect network available
+        
+        Sync->>Remote: Check for remote changes
+        Note over Remote: Query: last_updated > last_sync_time
+        
+        Remote-->>Sync: Remote changes
+        Note over Remote: Response: [list of changes]
+        
+        Sync->>Sync: Resolve conflicts
+        Note over Sync: Algorithm:<br/>- Server timestamp wins<br/>- User data preservation<br/>- Merge strategies
+        
+        Sync->>Local: Apply remote changes
+        Note over Local: UPDATE with conflict resolution
+        
+        Sync->>Remote: Push local changes
+        Note over Remote: Batch INSERT/UPDATE/DELETE
+        
+        Remote-->>Sync: Confirm sync
+        Note over Remote: Return: new timestamps
+        
+        Sync->>Local: Update sync status
+        Note over Local: UPDATE status='synced'
+        
+        Sync-->>App: Sync complete
+        
+        App-->>User: All data synchronized
+        Note over App: Show: "All changes synced"
+    end
+```
+
+### Conflict Resolution Strategy
+
+#### 1. **Timestamp-Based Resolution**
+```typescript
+interface SyncMetadata {
+  created_at: string;      // Device timestamp
+  server_created_at?: string; // Server timestamp
+  updated_at: string;      // Last local update
+  server_updated_at?: string; // Last server update
+  device_id: string;       // Unique device identifier
+  sync_version: number;    // Optimistic concurrency
+}
+```
+
+#### 2. **Conflict Types & Resolutions**
+- **Create-Create Conflicts**: Keep both, merge if possible
+- **Update-Update Conflicts**: Server timestamp wins, preserve user intent
+- **Create-Delete Conflicts**: Restore if recently deleted
+- **Field-Level Conflicts**: Merge non-conflicting fields
+
+#### 3. **User-Friendly Conflict UI**
+```typescript
+interface ConflictResolution {
+  type: 'feeding_conflict' | 'diaper_conflict' | 'sleep_conflict';
+  local_version: any;
+  remote_version: any;
+  suggested_resolution: any;
+  user_choice?: 'local' | 'remote' | 'merge' | 'custom';
+}
+```
+
+### Offline Storage Implementation
+
+#### 1. **SQLite Schema Enhancement**
+```sql
+-- Add offline support columns to all tables
+ALTER TABLE feeding_logs ADD COLUMN sync_status TEXT DEFAULT 'synced';
+ALTER TABLE feeding_logs ADD COLUMN device_id TEXT;
+ALTER TABLE feeding_logs ADD COLUMN local_id TEXT;
+ALTER TABLE feeding_logs ADD COLUMN sync_version INTEGER DEFAULT 1;
+ALTER TABLE feeding_logs ADD COLUMN conflict_data JSONB;
+
+-- Sync queue table
+CREATE TABLE sync_queue (
+  id TEXT PRIMARY KEY,
+  operation_type TEXT NOT NULL, -- 'insert', 'update', 'delete'
+  table_name TEXT NOT NULL,
+  record_id TEXT NOT NULL,
+  data JSONB NOT NULL,
+  retry_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  status TEXT DEFAULT 'pending' -- 'pending', 'processing', 'failed', 'completed'
+);
+
+-- Sync metadata table
+CREATE TABLE sync_metadata (
+  table_name TEXT PRIMARY KEY,
+  last_sync_timestamp TIMESTAMP,
+  last_pull_timestamp TIMESTAMP,
+  pending_operations INTEGER DEFAULT 0
+);
+```
+
+#### 2. **Data Access Layer**
+```typescript
+class OfflineDataManager {
+  private db: SQLiteDatabase;
+  
+  async saveEntry(entry: FeedingLog): Promise<void> {
+    const localId = generateUUID();
+    const entryWithMeta = {
+      ...entry,
+      local_id: localId,
+      sync_status: 'pending',
+      device_id: getDeviceId()
+    };
+    
+    // Save to local DB
+    await this.db.insert('feeding_logs', entryWithMeta);
+    
+    // Add to sync queue
+    await this.addToSyncQueue('insert', 'feeding_logs', localId, entryWithMeta);
+    
+    // Trigger sync if online
+    if (await this.isOnline()) {
+      this.syncManager.enqueueSyncOperation();
+    }
+  }
+}
+```
+
+### Offline Media Handling
+
+#### 1. **Image Compression & Storage**
+- **Aggressive Compression**: Reduce image sizes for offline storage
+- **Progressive Sync**: Sync thumbnails first, full images later
+- **Cache Management**: Intelligent cleanup based on storage limits
+
+#### 2. **OCR Offline Processing**
+```typescript
+class OfflineOCRProcessor {
+  async processImageOffline(imageUri: string): Promise<ExtractedData> {
+    // Use Tesseract.js for offline OCR
+    const { data: { text } } = await recognize(imageUri, 'eng');
+    
+    // Basic parsing without AI
+    const entries = this.parseTextBasic(text);
+    
+    // Save for AI processing when online
+    await this.queueForAIProcessing(imageUri, text);
+    
+    return { entries, confidence: 0.7, requires_review: true };
+  }
+}
+```
+
+### Offline UX Patterns
+
+#### 1. **Status Indicators**
+- **Sync Status Badge**: Shows pending/synced/error states
+- **Data Freshness**: Last sync timestamp display
+- **Offline Mode Banner**: Clear offline state indication
+
+#### 2. **Progressive Disclosure**
+```typescript
+interface SyncStatus {
+  isOnline: boolean;
+  pendingOperations: number;
+  lastSync: Date;
+  syncInProgress: boolean;
+  conflictsToResolve: number;
+}
+```
+
+#### 3. **Graceful Degradation**
+- **Read-Only Analytics**: Show cached data with disclaimers
+- **Essential Functions Only**: Prioritize core logging features
+- **Queue Status**: Show what's waiting to sync
+
+### Implementation Priorities
+
+#### Phase 1: Basic Offline Support
+- [ ] SQLite integration
+- [ ] Local data storage
+- [ ] Basic sync queue
+- [ ] Network detection
+
+#### Phase 2: Conflict Resolution
+- [ ] Conflict detection
+- [ ] Resolution strategies
+- [ ] User conflict UI
+- [ ] Data integrity checks
+
+#### Phase 3: Advanced Features
+- [ ] Offline OCR processing
+- [ ] Image compression
+- [ ] Smart sync scheduling
+- [ ] Bandwidth optimization
+
+---
+
 ## 🎨 UI/UX Design Principles
 
 ### Design System
