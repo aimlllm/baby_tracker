@@ -1,0 +1,193 @@
+# Cursor Rules for Project Development
+
+## 🔄 Git Workflow (MANDATORY)
+
+### Branch-Based Development
+- **ALWAYS work on feature branches** - never commit directly to main/master
+- Create descriptive branch names: `feature/user-auth`, `fix/login-bug`, `refactor/api-cleanup`
+- Each bug fix or feature implementation gets its own branch
+- Commit frequently on branches with descriptive messages
+
+### Development & Testing Cycle
+1. **Create and switch to feature branch**
+2. **Make incremental commits** - one logical change per commit
+3. **Push branch and run automated end-to-end tests**
+4. **Verify feature/fix works completely** - test all related functionality
+5. **Ensure branch is stable** before considering merge
+
+### Clean Mainline Integration
+- **Before merging to main**: Review and clean up commit history
+- **Squash related commits** into logical, cohesive commits
+- **Merge or rebase** to maintain clean Git history
+- **Only merge when feature is fully working** end-to-end
+- Use descriptive commit messages: feature/bug description + solution approach
+
+### Commit Message Standards
+- Include both the problem and solution in commit messages
+- Use clear, concise descriptions that explain the "why" not just the "what"
+- Format: `[type]: brief description of change and solution`
+
+---
+
+## 🔍 Code Analysis (MANDATORY FIRST STEP)
+
+### Initial Examination
+1. **Always examine codebase first**
+   - Read existing code to understand current context
+   - Check related files and dependencies
+   - Understand data flow and component relationships
+   - Look for existing patterns and conventions
+
+2. **Systematic search process**
+   - Grep for relevant functions, variables, and patterns
+   - Read multiple related files to understand full context
+   - Check database schema and API endpoints
+   - Understand authentication and authorization flows
+
+3. **Root cause identification**
+   - Don't just fix symptoms - understand underlying issues
+   - Trace data flow: frontend → API → database
+   - Check for schema mismatches and naming inconsistencies
+
+---
+
+## 📋 Design-First Approach (REQUIRED)
+
+### Design Documentation Requirements
+1. **Start with comprehensive requirements**
+   - List feature requirements and product description first
+   - Create overview of system requirements and system diagram
+   - Document the current problem clearly
+
+2. **Solution design and analysis**
+   - Design solution with workflow diagrams
+   - Identify all affected components and files
+   - Provide pros and cons for solutions, then recommend one
+   - Ask clarifying questions before implementation
+
+3. **Maintain DESIGN.md**
+   - Add workflow diagrams for new features
+   - Document authentication and authorization flows
+   - Include database schema relationships
+   - Update whenever significant changes are made
+
+### Requirements Validation
+- Confirm requirements before implementation
+- Clarify edge cases and error handling
+- Verify security implications
+- Ensure user experience is considered
+
+---
+
+## ⚙️ Technical Implementation Rules
+
+### Database & API Standards
+1. **Data integrity checks**
+   - Verify correct table names
+   - Check field names
+   - Ensure key relationships are correct
+   - Test queries before implementing in code
+
+2. **Error handling**
+   - Comprehensive error logging with context
+   - User-friendly error messages
+   - Fallback UI states for failed operations
+   - Debug information for development
+
+### Frontend Development Standards
+1. **Responsive design first**
+   - Consider different screen sizes and post counts
+   - Use dynamic CSS classes based on content
+   - Test with varying amounts of data
+
+2. **Component consistency**
+   - Follow existing patterns in the codebase
+   - Use consistent naming conventions
+   - Maintain TypeScript types and interfaces
+   - Reuse existing utility functions
+
+---
+
+## 🧪 Testing & Debugging
+
+### Systematic Debugging Approach
+1. **Comprehensive logging**
+   - Server-side console.log for API debugging
+   - Client-side debugging for UI issues
+   - Database query results and error details
+   - User action tracking and error states
+
+2. **Branch-based testing**
+   - Push changes to feature branch for testing
+   - Run automated end-to-end tests on branch
+   - Verify both happy path and error scenarios
+   - Check all related functionality after changes
+   - Only merge to main when everything works end-to-end
+
+3. **Progress tracking with TodoWrite**
+   - Use TodoWrite tool proactively for complex multi-step tasks
+   - Track progress and mark tasks as in_progress and completed in real-time
+   - Break down large features into smaller tasks
+   - Maintain visibility of overall progress
+
+### Proven Success Patterns
+1. **Progressive enhancement**
+   - Start with simple working solution
+   - Add complexity incrementally
+   - Test each enhancement separately
+
+2. **Robust error handling**
+   - Log errors with full context
+   - Provide actionable error messages
+   - Graceful degradation when possible
+
+---
+
+## 🔄 Development Workflow Summary
+
+| Step | Action | Description |
+|------|--------|-------------|
+| 1 | **Understand** | Read existing code and understand context |
+| 2 | **Design** | Create workflow diagrams and ask clarifying questions |
+| 3 | **Branch** | Create feature branch for implementation |
+| 4 | **Implement** | Make incremental changes following established patterns |
+| 5 | **Test** | Push branch and run automated end-to-end tests |
+| 6 | **Verify** | Ensure feature works completely in branch environment |
+| 7 | **Clean** | Squash/organize commits for clean history |
+| 8 | **Merge** | Integrate to main only when fully working |
+| 9 | **Document** | Update design documents and todo lists |
+
+---
+
+## 🎯 Key Principles
+
+- **Think from first principles** about user workflows
+- **Security is paramount** - verify admin access for all sensitive operations
+- **Performance matters** - optimize queries and minimize API calls
+- **User experience is critical** - provide feedback and handle edge cases
+- **Documentation saves time** - update design docs and maintain clear commit history
+
+---
+
+## 📚 Quick Reference
+
+### Before Every Feature
+- [ ] Read related code files
+- [ ] Create design document
+- [ ] Ask clarifying questions
+- [ ] Plan incremental approach
+
+### During Development
+- [ ] Create feature branch
+- [ ] Follow existing patterns
+- [ ] Add comprehensive logging
+- [ ] Test on branch incrementally
+- [ ] Commit frequently to branch
+
+### After Implementation
+- [ ] Run end-to-end tests on branch
+- [ ] Verify complete functionality
+- [ ] Clean up commit history
+- [ ] Merge to main when fully working
+- [ ] Update documentation
+- [ ] Track progress
